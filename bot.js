@@ -352,6 +352,13 @@ async function poll() {
       const res = await fetch(`${TG}/getUpdates?timeout=30&offset=${offset}&allowed_updates=["message","edited_message"]`);
       const data = await res.json();
 
+      // 409 Conflict: another instance is polling the same token (e.g. local + Railway).
+      // Wait quietly and try again — whoever's polling will eventually stop and we'll take over.
+      if (!data.ok && data.error_code === 409) {
+        await new Promise(r => setTimeout(r, 15000));
+        continue;
+      }
+
       if (data.ok && data.result.length > 0) {
         for (const update of data.result) {
           offset = update.update_id + 1;
@@ -366,6 +373,10 @@ async function poll() {
 }
 
 // ── Startup ───────────────────────────────────────────────────────────────────
+
+// Don't crash on unhandled rejections / errors — keep the bot alive
+process.on('unhandledRejection', err => console.error('[unhandledRejection]', err));
+process.on('uncaughtException', err => console.error('[uncaughtException]', err));
 
 if (!TOKEN) {
   console.error('TELEGRAM_BOT_TOKEN is not set in .env');
