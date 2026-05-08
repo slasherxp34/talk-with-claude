@@ -68,12 +68,37 @@ function saveAllowedChatId(chatId) {
   fs.writeFileSync(ENV_PATH, env);
 }
 
-// Per-chat session state
+// Per-chat session state — persisted to disk so it survives restarts
+const SESSIONS_FILE = path.join(__dirname, '.sessions.json');
 const sessions = new Map();
 
+function loadSessions() {
+  try {
+    const raw = fs.readFileSync(SESSIONS_FILE, 'utf8');
+    const obj = JSON.parse(raw);
+    for (const [k, v] of Object.entries(obj)) {
+      sessions.set(k, { ...v, running: false, proc: null });
+    }
+    console.log(`[sessions] loaded ${sessions.size} from disk`);
+  } catch {}
+}
+
+let saveTimer = null;
+function saveSessions() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const obj = {};
+    for (const [k, v] of sessions) {
+      obj[k] = { sessionId: v.sessionId, workDir: v.workDir, lastActivity: v.lastActivity };
+    }
+    try { fs.writeFileSync(SESSIONS_FILE, JSON.stringify(obj, null, 2)); } catch (e) { console.error('[sessions] save failed:', e.message); }
+  }, 500);
+}
+
 function getSession(chatId) {
-  if (!sessions.has(chatId)) {
-    sessions.set(chatId, {
+  const key = String(chatId);
+  if (!sessions.has(key)) {
+    sessions.set(key, {
       sessionId: null,
       workDir: DEFAULT_WORK_DIR,
       running: false,
@@ -81,7 +106,15 @@ function getSession(chatId) {
       lastActivity: Date.now(),
     });
   }
-  return sessions.get(chatId);
+  return sessions.get(key);
+}
+
+function formatElapsed(ms) {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}m ${r}s`;
 }
 
 // ── Telegram helpers ──────────────────────────────────────────────────────────
@@ -193,9 +226,11 @@ async function runTask(chatId, prompt, replyMsgId) {
   const rl = readline.createInterface({ input: proc.stdout });
   let finalText = '';
   let newSessionId = null;
-  let toolsSeen = [];
-  let lastStatusUpdate = Date.now();
+  const toolCounts = {};
+  let lastTool = '';
+  let toolCallCount = 0;
   let stderrBuf = '';
+  const startTime = Date.now();
 
   proc.stderr.on('data', d => { stderrBuf += d.toString(); });
 
@@ -211,12 +246,9 @@ async function runTask(chatId, prompt, replyMsgId) {
       const blocks = event.message?.content || [];
       for (const block of blocks) {
         if (block.type === 'tool_use') {
-          if (!toolsSeen.includes(block.name)) toolsSeen.push(block.name);
-          const now = Date.now();
-          if (statusMsgId && now - lastStatusUpdate > 5000) {
-            lastStatusUpdate = now;
-            editMessage(chatId, statusMsgId, `Running: ${toolsSeen.join(', ')}…`);
-          }
+          toolCounts[block.name] = (toolCounts[block.name] || 0) + 1;
+          lastTool = block.name;
+          toolCallCount++;
         }
       }
     }
@@ -226,11 +258,30 @@ async function runTask(chatId, prompt, replyMsgId) {
     }
   });
 
+  // Periodic status updates every 45s with elapsed time, tool count, and last action
+  const statusInterval = setInterval(() => {
+    if (!statusMsgId) return;
+    const elapsed = formatElapsed(Date.now() - startTime);
+    const toolSummary = Object.entries(toolCounts)
+      .map(([name, n]) => `${name}×${n}`)
+      .join(', ') || 'thinking';
+    const lines = [
+      `⏱ Running for ${elapsed}`,
+      `🔧 ${toolCallCount} tool calls — ${toolSummary}`,
+      lastTool ? `▸ Latest: ${lastTool}` : '',
+    ].filter(Boolean);
+    editMessage(chatId, statusMsgId, lines.join('\n'));
+  }, 45000);
+
   const exitCode = await new Promise(resolve => proc.on('close', resolve));
+  clearInterval(statusInterval);
 
   session.running = false;
   session.proc = null;
-  if (newSessionId) session.sessionId = newSessionId;
+  if (newSessionId) {
+    session.sessionId = newSessionId;
+    saveSessions();
+  }
 
   if (statusMsgId) await deleteMessage(chatId, statusMsgId);
 
@@ -295,6 +346,7 @@ async function handleUpdate(update) {
     }
     session.workDir = newDir;
     session.sessionId = null;
+    saveSessions();
     await sendMessage(chatId, `Working directory set to:\n\`${newDir}\`\nConversation reset.`);
     return;
   }
@@ -306,6 +358,7 @@ async function handleUpdate(update) {
 
   if (text === '/reset') {
     session.sessionId = null;
+    saveSessions();
     await sendMessage(chatId, 'Conversation reset. Starting fresh.');
     return;
   }
@@ -454,6 +507,7 @@ if (!ALLOWED_CHAT_ID) {
 }
 
 seedNexus();
+loadSessions();
 
 console.log(`Claude bin:   ${CLAUDE_BIN}`);
 console.log(`Default dir:  ${DEFAULT_WORK_DIR}`);
