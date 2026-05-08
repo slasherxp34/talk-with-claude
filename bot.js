@@ -2,14 +2,64 @@ require('dotenv').config();
 const { spawn } = require('child_process');
 const readline = require('readline');
 const fs = require('fs');
+const path = require('path');
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 let ALLOWED_CHAT_ID = process.env.ALLOWED_CHAT_ID || '';
-const DEFAULT_WORK_DIR = process.env.DEFAULT_WORK_DIR || process.env.HOME || '/workspace';
+const NEXUS_DIR = process.env.NEXUS_DIR || '';
+const DEFAULT_WORK_DIR = NEXUS_DIR || process.env.DEFAULT_WORK_DIR || process.env.HOME || '/workspace';
 // On Railway: /usr/local/bin/claude (npm global). On Mac: ~/.local/bin/claude
 const CLAUDE_BIN = process.env.CLAUDE_BIN || '/usr/local/bin/claude';
-const ENV_PATH = require('path').join(__dirname, '.env');
+const SEED_DIR = path.join(__dirname, 'nexus-seed');
+const AUTO_DELIVER = process.env.AUTO_DELIVER === 'true';
+const ENV_PATH = path.join(__dirname, '.env');
 const TG = `https://api.telegram.org/bot${TOKEN}`;
+
+function seedNexus() {
+  if (!NEXUS_DIR || !fs.existsSync(SEED_DIR)) return;
+  try { fs.mkdirSync(NEXUS_DIR, { recursive: true }); } catch {}
+  for (const f of fs.readdirSync(SEED_DIR)) {
+    const dest = path.join(NEXUS_DIR, f);
+    if (!fs.existsSync(dest)) {
+      fs.copyFileSync(path.join(SEED_DIR, f), dest);
+      console.log(`[seed] ${f} → ${dest}`);
+    }
+  }
+}
+
+function snapshotDir(dir) {
+  const out = new Map();
+  function walk(p) {
+    let entries;
+    try { entries = fs.readdirSync(p, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (e.name.startsWith('.') || e.name === 'node_modules') continue;
+      const full = path.join(p, e.name);
+      if (e.isDirectory()) walk(full);
+      else { try { out.set(full, fs.statSync(full).mtimeMs); } catch {} }
+    }
+  }
+  walk(dir);
+  return out;
+}
+
+function findChangedRoot(workDir, before, after) {
+  const changed = [];
+  for (const [f, mt] of after) {
+    if (!before.has(f) || before.get(f) !== mt) changed.push(f);
+  }
+  if (!changed.length) return null;
+  // Find the shallowest unique top-level child of workDir that contains changes
+  const tops = new Set();
+  for (const f of changed) {
+    const rel = path.relative(workDir, f);
+    const top = rel.split(path.sep)[0];
+    if (top && !top.startsWith('..')) tops.add(top);
+  }
+  if (tops.size === 1) return path.join(workDir, [...tops][0]);
+  if (tops.size > 1) return workDir;
+  return null;
+}
 
 function saveAllowedChatId(chatId) {
   ALLOWED_CHAT_ID = String(chatId);
@@ -127,6 +177,8 @@ async function runTask(chatId, prompt, replyMsgId) {
   const statusMsg = await sendMessage(chatId, 'Working on it…', replyMsgId);
   const statusMsgId = statusMsg?.message_id;
 
+  const before = AUTO_DELIVER ? snapshotDir(session.workDir) : null;
+
   let proc;
   try {
     proc = spawnClaude(prompt, session.workDir, session.sessionId);
@@ -189,6 +241,15 @@ async function runTask(chatId, prompt, replyMsgId) {
     await sendMessage(chatId, `Claude exited with code ${exitCode}.\n\n${errSnippet || '(no error output)'}`, replyMsgId);
   } else {
     await sendMessage(chatId, '(Task completed — no text output)', replyMsgId);
+  }
+
+  if (AUTO_DELIVER && exitCode === 0 && before) {
+    const after = snapshotDir(session.workDir);
+    const target = findChangedRoot(session.workDir, before, after);
+    if (target) {
+      await sendMessage(chatId, `Auto-delivering changed files: \`${path.basename(target)}\``);
+      await zipAndSend(chatId, target).catch(e => console.error('[auto-deliver]', e));
+    }
   }
 }
 
@@ -392,8 +453,12 @@ if (!ALLOWED_CHAT_ID) {
   console.warn('SETUP REQUIRED: Message the bot on Telegram and send /register to lock it to your account.');
 }
 
+seedNexus();
+
 console.log(`Claude bin:   ${CLAUDE_BIN}`);
 console.log(`Default dir:  ${DEFAULT_WORK_DIR}`);
+console.log(`Nexus dir:    ${NEXUS_DIR || '(not set)'}`);
+console.log(`Auto-deliver: ${AUTO_DELIVER}`);
 console.log(`Allowed chat: ${ALLOWED_CHAT_ID || '(anyone)'}`);
 
 poll().catch(err => {
