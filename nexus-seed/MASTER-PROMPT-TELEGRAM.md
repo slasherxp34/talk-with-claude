@@ -1,79 +1,46 @@
 # Master Prompt — Copy/paste this into Telegram
 
-Fill in the company details at the bottom. Send the whole thing to @Claude834bot. Claude will build the site end-to-end.
+Fill in the company details at the bottom. Send the whole thing to @Claude834bot.
 
 ---
 
 ```
-Build a website for the company at the bottom of this message. Follow these steps exactly. Do not ask me any questions — pick the mode, palette, and all design decisions yourself based on the rules in the template.
+Build a website for the company described at the bottom of this message. Read the spec at WEBSITE-PROMPT-TEMPLATE.md (in the current working directory) in full and follow every rule, code pattern, and convention in it. The template currently defines Modes A and B but more modes are being added — check it fresh each time and use whichever modes exist now.
 
-STEPS:
-1. Read /Users/philipsznewajs/Desktop/Coding Projects/Nexus/WEBSITE-PROMPT-TEMPLATE.md in full. This is your spec — every code pattern, rule, and decision must follow it.
-2. Create a new folder at /Users/philipsznewajs/Desktop/Coding Projects/Nexus/<business-slug>/ where <business-slug> is a kebab-case version of the org name.
-3. Use WebSearch to find the business on Google and pull their top 3-5 most recent Google reviews (5-star preferred). Capture: star rating, full quote, reviewer first name, location/city. If you cannot find real reviews, write `REVIEWS: none` and skip that section.
-4. Pick Mode A or Mode B per PART 2 of the template. Declare your choice and reasoning at the start.
-5. Pick a unique color palette per PART 3. Declare it before writing code.
-6. Build index.html plus all sub-pages per PART 11. Vanilla HTML/CSS/JS only. ES5 inside an IIFE. All CSS inline. Follow every rule in PART 10.
-7. Create PROJECT.md documenting: chosen mode, palette, business type reasoning, and any design choices.
-8. Once files are written, run `python3 -m http.server 8765 --directory <project-folder>` in the background so I can preview at http://localhost:8765
-9. Reply to me with: the project folder path, the localhost URL, mode chosen, palette used, and a 1-line summary of the build.
+FOLDER: Create a new folder named after the company (kebab-case version of the company name — e.g. "Joe's Plumbing" becomes joes-plumbing) inside the current working directory. Build the entire project inside that folder so I can open it directly in VS Code on my computer.
 
-Do not stop until all files are written and the local server is running.
+INSPIRATION (encouraged): Before building, you may use WebSearch to find:
+- Three.js examples / CodePen demos / Three.js journey scenes for original 3D ideas relevant to this business
+- Award-winning website references from Awwwards, Site Inspire, Godly, Httpster for layout / animation / typography inspo
+- Open 3D model libraries (Sketchfab, Poly Pizza, Quaternius) for free CC0 assets you could embed or recreate procedurally
+- Free video clips from Pexels / Mixkit / Coverr that match the business mood
+- Color palette inspiration from Coolors, Color Hunt, real-world brand photography
+Take what's interesting, adapt it — never copy-paste. The site must still be visually unique. List your inspiration sources in PROJECT.md.
 
-═══ COMPANY DETAILS ═══
+ORIGINALITY: Every website you build must be visually unique — never reuse a palette, layout, hero treatment, typography pairing, or chapter structure from a previous Nexus build. Before designing, list the sibling folders in the current directory and look at their PROJECT.md files so you know what's been done, then deliberately go in a different direction.
 
-ORGANIZATION NAME: 
-TYPE: 
-TAGLINE: 
-FOUNDED: 
-CITY / NEIGHBORHOOD: 
-ADDRESS: 
-PHONE: 
-EMAIL: 
-EXISTING WEBSITE: 
-TAX STATUS: 
+REVIEWS: Use WebSearch to find the business on Google and pull their top 3-5 most recent reviews (prefer 5-star). Capture rating, full quote, reviewer first name, and location. If genuine reviews can't be found, omit the reviews section — never invent them.
 
-INSTAGRAM: 
-FACEBOOK: 
-OTHER SOCIAL: 
+DECISIONS: Pick the mode, palette, fonts, 3D object, and all design decisions yourself based on the template's rules and the company type. Declare your choices at the very top of your output before writing any code: MODE CHOSEN, PALETTE, REASONING, INSPIRATION SOURCES.
 
-DONATE / PAYMENT LINK: 
+BUILD: Create index.html plus the sub-pages required by the template's PART 11. Vanilla HTML/CSS/JS only, ES5 inside an IIFE, all CSS inline, every rule from PART 10 enforced.
 
-HOURS:
-  Monday: 
-  Tuesday: 
-  Wednesday: 
-  Thursday: 
-  Friday: 
-  Saturday: 
-  Sunday: 
+DOCUMENT: Create a PROJECT.md inside the folder documenting: business name, mode, palette (hex codes), font choices, 3D object choice (if Mode A), layout decisions, what makes this site different from the other Nexus builds, inspiration sources, and the localhost URL.
 
-PRICING NOTE: 
+LOCALHOST PREVIEW: When all files are written, start a background local server with `python3 -m http.server 8765 --directory "<full project folder path>"` so I can immediately preview the site in my browser.
 
-SERVICES / PROGRAMS (4-8 items):
-- 
-- 
-- 
-- 
-- 
+NOTIFY ME WHEN DONE: Once the local server is running, send me a clear FINAL message that says:
+"✅ DONE. <Company name> website is ready.
+Folder: <full project folder path>
+Preview: http://localhost:8765
+Mode: <A/B/etc>
+Palette: <hex codes>
+1-line summary: <what makes this build unique>"
 
-KEY STATS (numbers that build trust — 4 of them):
-- 
-- 
-- 
-- 
+Do not ask me questions. Do not stop until the site is fully built, the local server is running, and you've sent the final ✅ DONE message.
 
-UPCOMING EVENTS (up to 3, optional):
-1. 
-2. 
-3. 
+Here are the details of the company:
 
-REVIEWS: pull from Google automatically — see step 3
-
-MERCH / PRODUCTS (optional):
-- 
-
-NOTES (anything else — owner's name, history, signature quote, special programs):
 ```
 
 ---
@@ -82,14 +49,14 @@ NOTES (anything else — owner's name, history, signature quote, special program
 
 1. Open Telegram → @Claude834bot
 2. Copy the entire code block above (everything between the triple backticks)
-3. Paste, fill in the COMPANY DETAILS section, send
-4. Wait — Claude will keep you posted with status messages as it works
-5. When it replies with the localhost URL, open it in your browser
-6. To grab the files later: text `/zip /Users/philipsznewajs/Desktop/Coding Projects/Nexus/<business-slug>` to download the project as a zip
+3. Paste, fill in the company details at the bottom (paste straight from Google), send
+4. Wait — you'll get a 45s progress update with elapsed time, tool count, and what Claude is currently doing
+5. When the build is done you'll get a ✅ DONE message with the folder path and preview URL
+6. Open `http://localhost:8765` in your Mac's browser
+7. Open the folder in VS Code from `~/Desktop/Coding Projects/Nexus/<company-slug>/`
 
 ## Tips
 
-- Leave REVIEWS blank — Claude pulls them from Google automatically
-- The more detail you give in NOTES, the more specific the copy will be
-- For services like emergency plumbers, KEY STATS like "60 min response" / "500+ jobs" / "5.0★ rating" work great
-- If you don't have a TAGLINE, leave blank — Claude will write one
+- The more detail in the company info, the better the copy
+- Leave reviews blank — Claude pulls them from Google automatically
+- If you want a specific bot to handle the request, briefly pause the other (Railway: pause service; local: `launchctl unload ~/Library/LaunchAgents/com.claude.bot.plist`)
