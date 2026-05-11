@@ -228,11 +228,27 @@ async function runTask(chatId, prompt, replyMsgId) {
   let newSessionId = null;
   const toolCounts = {};
   let lastTool = '';
+  let lastToolInput = '';
+  let lastAssistantText = '';
   let toolCallCount = 0;
   let stderrBuf = '';
   const startTime = Date.now();
 
   proc.stderr.on('data', d => { stderrBuf += d.toString(); });
+
+  function summariseToolInput(name, input) {
+    if (!input || typeof input !== 'object') return '';
+    if (name === 'Bash') return (input.command || '').slice(0, 70);
+    if (name === 'Read' || name === 'Edit' || name === 'Write') return (input.file_path || '').split('/').slice(-2).join('/');
+    if (name === 'Glob' || name === 'Grep') return input.pattern || input.path || '';
+    if (name === 'WebSearch' || name === 'WebFetch') return (input.query || input.url || '').slice(0, 70);
+    if (name === 'TodoWrite') {
+      const todos = input.todos || [];
+      const active = todos.find(t => t.status === 'in_progress');
+      return active ? active.activeForm : `${todos.length} todos`;
+    }
+    return '';
+  }
 
   rl.on('line', line => {
     let event;
@@ -248,7 +264,11 @@ async function runTask(chatId, prompt, replyMsgId) {
         if (block.type === 'tool_use') {
           toolCounts[block.name] = (toolCounts[block.name] || 0) + 1;
           lastTool = block.name;
+          lastToolInput = summariseToolInput(block.name, block.input);
           toolCallCount++;
+        } else if (block.type === 'text' && block.text) {
+          const t = block.text.trim();
+          if (t) lastAssistantText = t.split('\n')[0].slice(0, 140);
         }
       }
     }
@@ -258,18 +278,19 @@ async function runTask(chatId, prompt, replyMsgId) {
     }
   });
 
-  // Periodic status updates every 45s with elapsed time, tool count, and last action
+  // Periodic status updates every 45s
   const statusInterval = setInterval(() => {
     if (!statusMsgId) return;
     const elapsed = formatElapsed(Date.now() - startTime);
-    const toolSummary = Object.entries(toolCounts)
-      .map(([name, n]) => `${name}×${n}`)
-      .join(', ') || 'thinking';
-    const lines = [
-      `⏱ Running for ${elapsed}`,
-      `🔧 ${toolCallCount} tool calls — ${toolSummary}`,
-      lastTool ? `▸ Latest: ${lastTool}` : '',
-    ].filter(Boolean);
+    const lines = [`⏱ ${elapsed} elapsed · ${toolCallCount} tool calls`];
+    if (lastTool) {
+      lines.push(lastToolInput ? `▸ ${lastTool}: ${lastToolInput}` : `▸ ${lastTool}`);
+    }
+    if (lastAssistantText) {
+      lines.push(`💭 ${lastAssistantText}`);
+    } else if (!lastTool) {
+      lines.push('💭 Reading the spec, planning the build…');
+    }
     editMessage(chatId, statusMsgId, lines.join('\n'));
   }, 45000);
 
