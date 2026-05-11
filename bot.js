@@ -459,12 +459,14 @@ async function zipAndSend(chatId, targetPath) {
 
 async function poll() {
   let offset = 0;
+  let consecFailures = 0;
   console.log('[bot] Polling started');
 
   while (true) {
     try {
       const res = await fetch(`${TG}/getUpdates?timeout=30&offset=${offset}&allowed_updates=["message","edited_message"]`);
       const data = await res.json();
+      consecFailures = 0;
 
       // 409 Conflict: another instance is polling the same token (e.g. local + Railway).
       // Wait quietly and try again — whoever's polling will eventually stop and we'll take over.
@@ -480,8 +482,15 @@ async function poll() {
         }
       }
     } catch (e) {
-      console.error('[poll] error:', e.message);
-      await new Promise(r => setTimeout(r, 5000));
+      consecFailures++;
+      console.error(`[poll] error #${consecFailures}:`, e.message);
+      // After ~2 minutes of consecutive failures, exit so LaunchAgent/Railway restarts us fresh.
+      // This recovers from dead sockets after Mac sleep / network changes.
+      if (consecFailures >= 12) {
+        console.error('[poll] too many failures, exiting for clean restart');
+        process.exit(1);
+      }
+      await new Promise(r => setTimeout(r, 10000));
     }
   }
 }
