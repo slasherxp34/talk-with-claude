@@ -27,6 +27,39 @@ function seedNexus() {
   }
 }
 
+// On Railway: symlink ~/.claude → /workspace/.claude so Claude Code session
+// memory persists across container redeploys (the Volume covers /workspace).
+function linkClaudeMemoryToVolume() {
+  const persistRoot = process.env.CLAUDE_MEMORY_PERSIST_DIR;
+  if (!persistRoot) return;
+  const home = process.env.HOME;
+  if (!home) return;
+  const target = path.join(home, '.claude');
+  try {
+    fs.mkdirSync(persistRoot, { recursive: true });
+    let needLink = true;
+    if (fs.existsSync(target)) {
+      const st = fs.lstatSync(target);
+      if (st.isSymbolicLink() && fs.readlinkSync(target) === persistRoot) needLink = false;
+      else if (st.isDirectory()) {
+        // First boot: copy any existing claude memory into the volume, then replace with symlink
+        for (const f of fs.readdirSync(target)) {
+          const src = path.join(target, f);
+          const dst = path.join(persistRoot, f);
+          if (!fs.existsSync(dst)) fs.cpSync(src, dst, { recursive: true });
+        }
+        fs.rmSync(target, { recursive: true, force: true });
+      }
+    }
+    if (needLink) {
+      fs.symlinkSync(persistRoot, target, 'dir');
+      console.log(`[memory] linked ${target} → ${persistRoot}`);
+    }
+  } catch (e) {
+    console.error('[memory] link failed:', e.message);
+  }
+}
+
 function snapshotDir(dir) {
   const out = new Map();
   function walk(p) {
@@ -536,6 +569,7 @@ if (!ALLOWED_CHAT_ID) {
   console.warn('SETUP REQUIRED: Message the bot on Telegram and send /register to lock it to your account.');
 }
 
+linkClaudeMemoryToVolume();
 seedNexus();
 loadSessions();
 
