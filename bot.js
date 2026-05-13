@@ -241,6 +241,12 @@ async function runTask(chatId, prompt, replyMsgId) {
   session.running = true;
   session.lastActivity = Date.now();
 
+  // Safety net: guarantee session.running gets reset no matter what goes wrong below
+  const resetRunning = () => {
+    session.running = false;
+    session.proc = null;
+  };
+
   const statusMsg = await sendMessage(chatId, 'Working on it…', replyMsgId);
   const statusMsgId = statusMsg?.message_id;
 
@@ -250,12 +256,15 @@ async function runTask(chatId, prompt, replyMsgId) {
   try {
     proc = spawnClaude(prompt, session.workDir, session.sessionId);
   } catch (e) {
-    session.running = false;
+    resetRunning();
     await sendMessage(chatId, `Failed to start Claude: ${e.message}\nExpected binary at: ${CLAUDE_BIN}`);
     return;
   }
 
   session.proc = proc;
+  // Also reset on error/exit events — covers cases where 'close' never fires (zombie, ENOENT, etc.)
+  proc.on('error', e => { console.error('[claude proc error]', e.message); resetRunning(); });
+  proc.on('exit', () => { resetRunning(); });
 
   const rl = readline.createInterface({ input: proc.stdout });
   let finalText = '';
