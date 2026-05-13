@@ -116,16 +116,17 @@ function loadSessions() {
   } catch {}
 }
 
-let saveTimer = null;
 function saveSessions() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    const obj = {};
-    for (const [k, v] of sessions) {
-      obj[k] = { sessionId: v.sessionId, workDir: v.workDir, lastActivity: v.lastActivity };
-    }
-    try { fs.writeFileSync(SESSIONS_FILE, JSON.stringify(obj, null, 2)); } catch (e) { console.error('[sessions] save failed:', e.message); }
-  }, 500);
+  const obj = {};
+  for (const [k, v] of sessions) {
+    obj[k] = { sessionId: v.sessionId, workDir: v.workDir, lastActivity: v.lastActivity };
+  }
+  try {
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(obj, null, 2));
+    console.log(`[sessions] saved ${sessions.size} (writing to ${SESSIONS_FILE})`);
+  } catch (e) {
+    console.error('[sessions] save failed:', e.message);
+  }
 }
 
 function getSession(chatId) {
@@ -434,6 +435,29 @@ async function handleUpdate(update) {
     return;
   }
 
+  if (text === '/recover') {
+    // Find the most recent claude session JSONL for the current workDir and resume it
+    const encoded = session.workDir.replace(/\//g, '-');
+    const projDir = path.join(process.env.HOME || '', '.claude', 'projects', encoded);
+    try {
+      const files = fs.readdirSync(projDir)
+        .filter(f => f.endsWith('.jsonl'))
+        .map(f => ({ name: f, mtime: fs.statSync(path.join(projDir, f)).mtimeMs }))
+        .sort((a, b) => b.mtime - a.mtime);
+      if (!files.length) {
+        await sendMessage(chatId, `No prior Claude sessions found for \`${session.workDir}\``);
+      } else {
+        const sid = files[0].name.replace('.jsonl', '');
+        session.sessionId = sid;
+        saveSessions();
+        await sendMessage(chatId, `Resumed most recent Claude session:\n\`${sid}\`\n(${files.length} sessions exist for this folder)`);
+      }
+    } catch (e) {
+      await sendMessage(chatId, `Could not access ${projDir}: ${e.message}`);
+    }
+    return;
+  }
+
   if (text === '/help') {
     await sendMessage(chatId,
       '*Claude Code Bot*\n\n' +
@@ -442,6 +466,7 @@ async function handleUpdate(update) {
       '`/dir <path>` — set working directory\n' +
       '`/pwd` — show current directory\n' +
       '`/zip [path]` — download current folder as zip\n' +
+      '`/recover` — resume the most recent Claude session in this folder\n' +
       '`/reset` — start a new conversation\n' +
       '`/cancel` — stop current task\n' +
       '`/help` — show this message\n\n' +
