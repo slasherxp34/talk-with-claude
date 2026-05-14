@@ -27,12 +27,13 @@ BUILD: Create index.html plus the sub-pages required by the template's PART 11. 
 
 DOCUMENT: Create a PROJECT.md inside the folder documenting: business name, mode, palette (hex codes), font choices, 3D object choice (if Mode A), layout decisions, what makes this site different from the other Nexus builds, inspiration sources, and the localhost URL.
 
-LOCALHOST PREVIEW: When all files are written, start a background local server with `python3 -m http.server 8765 --directory "<full project folder path>"` so I can immediately preview the site in my browser.
+LOCALHOST PREVIEW: When all files are written, kill any previous server on port 8765 (`lsof -ti:8765 | xargs kill 2>/dev/null`) and start a fresh background server with `python3 -m http.server 8765 --bind 0.0.0.0 --directory "<full project folder path>"`. The `--bind 0.0.0.0` is critical — it makes the server reachable from other devices on the same Wi-Fi, not just localhost. Then run `hostname` to capture this machine's network name (e.g. opens-mac-mini.local).
 
 NOTIFY ME WHEN DONE: Once the local server is running, send me a clear FINAL message that says:
 "✅ DONE. <Company name> website is ready.
 Folder: <full project folder path>
-Preview: http://localhost:8765
+Preview from this machine: http://localhost:8765
+Preview from any device on Wi-Fi: http://<hostname>:8765
 Mode: <A/B/etc>
 Palette: <hex codes>
 1-line summary: <what makes this build unique>"
