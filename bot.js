@@ -321,6 +321,17 @@ async function runTask(chatId, prompt, replyMsgId) {
     }
   });
 
+  // Auto-cancel if Claude makes zero progress (no tool calls + no text) for 10 minutes
+  const STUCK_TIMEOUT_MS = 10 * 60 * 1000;
+  const stuckTimer = setInterval(() => {
+    if (toolCallCount === 0 && !lastAssistantText && Date.now() - startTime > STUCK_TIMEOUT_MS) {
+      console.error(`[stuck] killing claude task after ${formatElapsed(Date.now() - startTime)} of zero activity`);
+      try { proc.kill('SIGTERM'); } catch {}
+      setTimeout(() => { try { proc.kill('SIGKILL'); } catch {} }, 3000);
+      clearInterval(stuckTimer);
+    }
+  }, 60000);
+
   // Periodic status updates every 45s
   const statusInterval = setInterval(() => {
     if (!statusMsgId) return;
@@ -339,6 +350,7 @@ async function runTask(chatId, prompt, replyMsgId) {
 
   const exitCode = await new Promise(resolve => proc.on('close', resolve));
   clearInterval(statusInterval);
+  clearInterval(stuckTimer);
 
   session.running = false;
   session.proc = null;
